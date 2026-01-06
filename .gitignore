@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+out/
+
+# VSCode test directories
+.vscode-test/
+.vscode-test-web/
+
+# Package files (build locally)
+*.vsix
+
+# Log files
+*.log
+yarn-error.log
+npm-debug.log*
+
+# Environment and config
+.direnv/
+.env
+.env.local
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+
+# Crossnote build artifacts (generated during build)
+crossnote/
+mume/
