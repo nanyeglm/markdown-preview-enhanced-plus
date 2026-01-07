@@ -1,5 +1,5 @@
 {
-  "name": "markdown-preview-enhanced",
+  "name": "markdown-preview-enhanced-plus",
   "displayName": "%displayName%",
   "version": "0.8.20",
   "description": "%description%",
@@ -10,9 +10,9 @@
     "markdown"
   ],
   "bugs": {
-    "url": "https://github.com/shd101wyy/vscode-markdown-preview-enhanced/issues"
+    "url": "https://github.com/nanyeglm/markdown-preview-enhanced-plus/issues"
   },
-  "repository": "https://github.com/shd101wyy/vscode-markdown-preview-enhanced",
+  "repository": "https://github.com/nanyeglm/markdown-preview-enhanced-plus",
   "license": "NCSA",
   "contributors": [
     "shd101wyy",
@@ -20,7 +20,7 @@
     "gabyx",
     "mavaddat"
   ],
-  "publisher": "shd101wyy",
+  "publisher": "nanyeglm",
   "main": "./out/native/extension.js",
   "browser": "./out/web/extension.js",
   "scripts": {

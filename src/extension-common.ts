@@ -148,6 +148,41 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
     }
   }
 
+  /**
+   * Cleanup locked preview group when not viewing markdown.
+   * This unlocks and closes any secondary editor group that might be left over.
+   */
+  async function cleanupPreviewGroup() {
+    try {
+      const tabGroups = vscode.window.tabGroups;
+
+      // If there are multiple groups, check if the second one should be cleaned up
+      if (tabGroups.all.length > 1) {
+        const secondGroup = tabGroups.all.find(g => g.viewColumn === vscode.ViewColumn.Two);
+        if (secondGroup) {
+          // Check if the second group only has webview tabs (preview) or is empty
+          const hasOnlyWebviews = secondGroup.tabs.every(
+            tab => tab.input instanceof vscode.TabInputWebview
+          );
+          const isEmpty = secondGroup.tabs.length === 0;
+
+          if (isEmpty || hasOnlyWebviews) {
+            // Focus on second group
+            await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+            // Unlock it
+            await vscode.commands.executeCommand('workbench.action.unlockEditorGroup');
+            // Close all editors in the group
+            await vscode.commands.executeCommand('workbench.action.closeEditorsInGroup');
+            // Focus back to first group
+            await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[MPE] Failed to cleanup preview group:', error);
+    }
+  }
+
   async function openPreview(uri?: vscode.Uri) {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
@@ -1063,15 +1098,17 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
               openPreviewToTheSide(sourceUri);
             }
           } else {
-            // Non-markdown file: close preview if configured
+            // Non-markdown file: cleanup preview group
+            // Check version before async operation
+            if (currentVersion !== autoPreviewVersion) {
+              return;
+            }
+
             const closePreviewOnNonMarkdown = getMPEConfig<boolean>(
               'closePreviewOnNonMarkdown',
             );
+
             if (closePreviewOnNonMarkdown) {
-              // Check version before async operation
-              if (currentVersion !== autoPreviewVersion) {
-                return;
-              }
               const previewProvider = await getPreviewContentProvider(
                 editor.document.uri,
               );
@@ -1084,6 +1121,11 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
                 previewProvider.closeCurrentPreview();
               }
             }
+
+            // Always cleanup any empty or leftover locked preview groups when not on markdown
+            // This handles: VSCode restart with empty locked group, markdown closed but group remains
+            await cleanupPreviewGroup();
+
             // Ensure new files open in the primary (left) editor group, not the preview group
             if (editor.viewColumn !== vscode.ViewColumn.One) {
               await moveEditorToPrimaryGroup();
