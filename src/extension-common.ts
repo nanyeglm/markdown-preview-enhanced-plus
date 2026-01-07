@@ -64,6 +64,63 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
   // Preheat PreviewProvider for all workspace folders to reduce first-open delay
   preheatPreviewProviders(context);
 
+  // Check current active editor on startup and open preview if it's a markdown file
+  // This handles the case when VSCode restarts with a markdown file already open
+  setTimeout(async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (editor && isMarkdownFile(editor.document)) {
+      const automaticallyShowPreview = getMPEConfig<boolean>(
+        'automaticallyShowPreviewOfMarkdownBeingEdited',
+      );
+      if (automaticallyShowPreview) {
+        const previewProvider = await PreviewProvider.getPreviewContentProvider(
+          editor.document.uri,
+          context,
+        );
+        if (!previewProvider.isPreviewOn(editor.document.uri)) {
+          // Open preview to the side
+          previewProvider.initPreview({
+            sourceUri: editor.document.uri,
+            document: editor.document,
+            cursorLine: getEditorActiveCursorLine(editor),
+            viewOptions: {
+              viewColumn: vscode.ViewColumn.Two,
+              preserveFocus: true,
+            },
+          });
+          // Lock the preview group
+          try {
+            await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+            await vscode.commands.executeCommand('workbench.action.lockEditorGroup');
+            await vscode.window.showTextDocument(editor.document, {
+              viewColumn: editor.viewColumn,
+              preserveFocus: false,
+              preview: false,
+            });
+          } catch (error) {
+            console.warn('[MPE] Failed to lock preview group on startup:', error);
+          }
+        }
+      }
+    } else if (editor) {
+      // Not a markdown file on startup, cleanup any leftover preview groups
+      const tabGroups = vscode.window.tabGroups;
+      if (tabGroups.all.length > 1) {
+        const secondGroup = tabGroups.all.find(g => g.viewColumn === vscode.ViewColumn.Two);
+        if (secondGroup && secondGroup.tabs.length === 0) {
+          try {
+            await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+            await vscode.commands.executeCommand('workbench.action.unlockEditorGroup');
+            await vscode.commands.executeCommand('workbench.action.closeEditorsInGroup');
+            await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+          } catch (error) {
+            console.warn('[MPE] Failed to cleanup empty group on startup:', error);
+          }
+        }
+      }
+    }
+  }, 500); // Small delay to ensure VSCode is fully initialized
+
   function getCurrentWorkingDirectory() {
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor) {
@@ -110,7 +167,9 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
   async function lockPreviewGroup(fallbackEditor: vscode.TextEditor) {
     try {
       // Focus on the second editor group (where preview is)
-      await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+      await vscode.commands.executeCommand(
+        'workbench.action.focusSecondEditorGroup',
+      );
       // Lock that group
       await vscode.commands.executeCommand('workbench.action.lockEditorGroup');
       // Restore focus to the original editor
@@ -129,9 +188,15 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
    */
   async function unlockPreviewGroup() {
     try {
-      await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
-      await vscode.commands.executeCommand('workbench.action.unlockEditorGroup');
-      await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+      await vscode.commands.executeCommand(
+        'workbench.action.focusSecondEditorGroup',
+      );
+      await vscode.commands.executeCommand(
+        'workbench.action.unlockEditorGroup',
+      );
+      await vscode.commands.executeCommand(
+        'workbench.action.focusFirstEditorGroup',
+      );
     } catch (error) {
       console.warn('[MPE] Failed to unlock preview group:', error);
     }
@@ -142,7 +207,9 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
    */
   async function moveEditorToPrimaryGroup() {
     try {
-      await vscode.commands.executeCommand('workbench.action.moveEditorToFirstGroup');
+      await vscode.commands.executeCommand(
+        'workbench.action.moveEditorToFirstGroup',
+      );
     } catch (error) {
       console.warn('[MPE] Failed to move editor to first group:', error);
     }
@@ -158,23 +225,33 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
 
       // If there are multiple groups, check if the second one should be cleaned up
       if (tabGroups.all.length > 1) {
-        const secondGroup = tabGroups.all.find(g => g.viewColumn === vscode.ViewColumn.Two);
+        const secondGroup = tabGroups.all.find(
+          (g) => g.viewColumn === vscode.ViewColumn.Two,
+        );
         if (secondGroup) {
           // Check if the second group only has webview tabs (preview) or is empty
           const hasOnlyWebviews = secondGroup.tabs.every(
-            tab => tab.input instanceof vscode.TabInputWebview
+            (tab) => tab.input instanceof vscode.TabInputWebview,
           );
           const isEmpty = secondGroup.tabs.length === 0;
 
           if (isEmpty || hasOnlyWebviews) {
             // Focus on second group
-            await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+            await vscode.commands.executeCommand(
+              'workbench.action.focusSecondEditorGroup',
+            );
             // Unlock it
-            await vscode.commands.executeCommand('workbench.action.unlockEditorGroup');
+            await vscode.commands.executeCommand(
+              'workbench.action.unlockEditorGroup',
+            );
             // Close all editors in the group
-            await vscode.commands.executeCommand('workbench.action.closeEditorsInGroup');
+            await vscode.commands.executeCommand(
+              'workbench.action.closeEditorsInGroup',
+            );
             // Focus back to first group
-            await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+            await vscode.commands.executeCommand(
+              'workbench.action.focusFirstEditorGroup',
+            );
           }
         }
       }
@@ -1078,8 +1155,8 @@ export async function initExtensionCommon(context: vscode.ExtensionContext) {
                   cursorLine: getEditorActiveCursorLine(editor),
                   viewOptions: {
                     viewColumn:
-                      previewProvider.getPreviews(sourceUri)?.at(0)?.viewColumn ??
-                      vscode.ViewColumn.One,
+                      previewProvider.getPreviews(sourceUri)?.at(0)
+                        ?.viewColumn ?? vscode.ViewColumn.One,
                     preserveFocus: true,
                   },
                 });
